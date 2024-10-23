@@ -1,0 +1,225 @@
+---
+title: "Meta DigData Step-Up"
+author: "William Simms"
+date: "2024-10-19"
+output: html_document
+---
+##Meta DigData Setp-up virtual work experiance challenge
+
+
+##loading relavent packages and spreadsheets into R.
+```{r}
+
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(flextable)
+
+setwd("~/Projects-programming/Meta Step Up career challenge")
+getwd()
+df_CD <- read_excel("Digdata Step Up Meta dataset.xlsx",sheet = "Campaigns data")
+df_SD <- read_excel("Digdata Step Up Meta dataset.xlsx", sheet = "Study Data")
+
+
+```
+##hygine checks of the data & Merging the data.
+
+```{r}
+df<- merge(df_SD, df_CD, by = "study_id")
+
+##changing names of each test.
+# Assuming your data frame is named 'df' and the column is 'column_name'
+df <- df %>%
+  mutate(test_name = case_when(
+    test_name == "P2PWASCCO_" ~ "Test_1",
+    test_name == "P2PWASC_" ~ "Test_2",
+    test_name == "P2PWASC3_" ~ "Test_3",
+    TRUE ~ "NA"  # Default value for any other value
+  ))
+
+
+
+##We need to ensure that our studies all have a duration of >= 7 days.
+df_clean <- df[df$duration_days >= 7,]
+
+##Checking for duplicates.
+has_duplicates <- any(duplicated(df))
+if (has_duplicates) {
+  cat("Data frame has duplicates.\n")
+} else {
+  cat("Data frame has no duplicates.\n")
+}
+
+##Cell count is fixed to 2 so we have minimal variation in variables.
+
+
+```
+
+
+##converstion rate & CPA
+```{r}
+
+##conversion rate = cell_conversions / cell_impressions
+df_clean$conversion_rate = df_clean$cell_conversions / df_clean$cell_impressions
+
+df_clean$CPA = df_clean$cell_spend_usd / df_clean$cell_conversions
+
+
+##eliminating all NAN/NA/inf values from this table
+df_clean <- df_clean[complete.cases(df_clean[, c("conversion_rate", "CPA")]), ]
+# Identify rows with infinite values in the CPA column
+inf_indices <- which(is.infinite(df_clean$CPA))
+
+# Remove rows with infinite values
+df_clean <- df_clean[-inf_indices, ]
+
+Test_1 <- df_clean[df_clean$test_name == "Test_1", ]
+Test_2 <- df_clean[df_clean$test_name == "Test_2",]
+Test_3 <- df_clean[df_clean$test_name == "Test_3",]
+##average conversion rate and CPA for 1,2,3. CR *w 10^5 to make graphs better
+Test_1CR <- (sum(Test_1$conversion_rate)/nrow(Test_1)) * (10**4)
+Test_2CR <- (sum(Test_2$conversion_rate)/nrow(Test_2)) * (10**4)
+Test_3CR <- (sum(Test_3$conversion_rate)/nrow(Test_3)) * (10**4)
+
+Test_1CPA <- sum(Test_1$CPA)/nrow(Test_1)
+Test_2CPA <- sum(Test_2$CPA)/nrow(Test_2)
+Test_3CPA <- sum(Test_3$CPA)/nrow(Test_3)
+
+```
+
+
+##looking at particular metrics
+```{r}
+##KPI
+summary(Test_1$primary_kpi_has_winner)
+summary(Test_2$primary_kpi_has_winner)
+summary(Test_3$primary_kpi_has_winner)
+##Video
+summary(Test_1$is_video)
+summary(Test_2$is_video)
+summary(Test_3$is_video)
+##is_automatic_placement
+summary(Test_1$is_automatic_placement)
+summary(Test_2$is_automatic_placement)
+summary(Test_3$is_automatic_placement)
+##Regions
+(sum(Test_1$advertiser_region == "APAC")/nrow(Test_1))
+(sum(Test_2$advertiser_region == "APAC")/nrow(Test_2))
+(sum(Test_3$advertiser_region == "APAC")/nrow(Test_3))
+
+
+
+```
+
+
+####create a summary tables for correlations 
+```{r}
+
+##metrics relating to type of content
+df_clean2 <- na.omit(df_clean)
+
+corrV_CR <- round(cor(df_clean2$is_video,df_clean2$conversion_rate) * 10**3)
+corrI_CR <- round(cor(df_clean2$is_interactive_ad,df_clean2$conversion_rate)* 10**3)
+corrT_CR <- round(cor(df_clean2$is_tgt_using_interests,df_clean2$conversion_rate)* 10**3)
+corrA_CR <- round(cor(df_clean2$is_automatic_placement,df_clean2$conversion_rate)* 10**3)
+corrL_CR <- round(cor(df_clean2$is_tgt_using_lookalikes,df_clean2$conversion_rate)* 10**3)
+
+corrV_CPA <- round(cor(df_clean2$is_video,df_clean2$CPA) * 10**3)
+corrI_CPA <- round(cor(df_clean2$is_interactive_ad,df_clean2$CPA)* 10**3)
+corrT_CPA <- round(cor(df_clean2$is_tgt_using_interests,df_clean2$CPA)* 10**3)
+corrA_CPA <- round(cor(df_clean2$is_automatic_placement,df_clean2$CPA)* 10**3)
+corrL_CPA <- round(cor(df_clean2$is_tgt_using_lookalikes,df_clean2$CPA)* 10**3)
+
+```
+
+
+
+
+
+##graphs
+```{r}
+
+##for conversation rates and cpa for each test.
+vectCR <- c(Test_1CR, Test_2CR, Test_3CPA)
+vectCPA <- c(Test_1CPA, Test_2CPA, Test_3CPA)
+names <- c("Test1", "Test2", "Test3")
+
+CR <- data.frame(names, vectCR)
+CPA <- data.frame(names, vectCPA)
+
+plot1 <- ggplot(CR, aes(x = names, y = vectCR, fill = names)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Avg. Conversation rate for each test", x = "AB tests", y = "Avg. Conversation rates x 10^4") +
+  scale_fill_brewer(palette = "Set1") 
+
+ggsave("my_plot1.png",plot1)
+
+plot2 <- ggplot(CR, aes(x = names, y = vectCPA, fill = names)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Avg.CPA for each test", x = "AB tests", y = "Avg. CPA") +
+  scale_fill_brewer(palette = "Set1")
+
+ggsave("my_plot2.png",plot2)
+
+##How does is-video relate to conversion rate.
+
+
+##create a summary tables for correlations 
+
+data <- data.frame(
+  metrics = c("CPA", "converstion_rate"),
+  is_video = c(corrV_CPA, corrV_CR),
+  is_interactive_ad = c(corrI_CPA, corrI_CR),
+  is_tgt_using_interests = c(corrT_CPA,corrT_CR),
+  is_automatic_placement =c(corrA_CPA,corrA_CR),
+  is_tgt_using_lookalikes = c(corrL_CPA,corrL_CR)
+)
+ft <- flextable(data) %>%
+      autofit() %>%
+      theme_booktabs()
+
+save_as_image(ft, "table.png")
+
+##CPA vs Region
+box_1 <- ggplot(df_clean2, aes(x = advertiser_region, y = CPA)) +
+  geom_boxplot() +
+  labs(title = "CPA vs Advertiser Region",
+       x = "Advertiser Region ",
+       y = "CPA") + scale_y_continuous(limits = c(0, 75))
+
+##CR vs Region
+box_2 <- ggplot(df_clean2, aes(x = advertiser_region, y = conversion_rate*10**4)) +
+  geom_boxplot() +
+  labs(title = "conversion_rate vs Advertiser Region",
+       x = "Advertiser Region ",
+       y = "conversion_rate x 10 ^ 4") + scale_y_continuous(limits = c(0, 20))
+
+ggsave("box1.png", box_1)
+ggsave("box2.png", box_2)
+
+
+
+##CPA vs vertical
+plot3 <- ggplot(df_clean2, aes(x = CPA, fill = vertical)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of CPA by vertical",
+       x = "CPA",
+       y = "Density",
+       fill = "vertical")+ xlim(c(0, 10))
+
+##CR vs vertical
+plot4 <- ggplot(df_clean2, aes(x = conversion_rate*10**4, fill = vertical)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of conversion_rate by vertical",
+       x = "CPA",
+       y = "Density",
+       fill = "vertical")+ xlim(c(0, 10))
+ggsave("plot3.png", plot3)
+ggsave("plot4.png", plot4)
+
+
+```
+
+
+
+
